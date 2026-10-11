@@ -102,6 +102,7 @@ provider.manualLocation = nil // back to GPS
 provider.smoothingTimeConstant = 0.15 // seconds; larger = calmer, slower
 provider.reportThreshold = 0.1        // degrees; smaller changes are not reported
 provider.calibrationThreshold = 20    // degrees of heading accuracy
+provider.locationTimeout = 10         // seconds without a fix before .location(CLError(.locationUnknown))
 ```
 
 ### Appearance

@@ -57,7 +57,10 @@ public final class QiblaCompassView: UIView {
     }
 
     public var appearance: Appearance = .default {
-        didSet { applyAppearance() }
+        didSet {
+            applyAppearance()
+            setNeedsLayout()
+        }
     }
 
     /// Duration of each heading animation. Keep it short; headings arrive many times per second.
@@ -153,8 +156,11 @@ public final class QiblaCompassView: UIView {
         ringLayer.path = circle(center: c, radius: radius * 0.83)
         innerRingLayer.path = circle(center: c, radius: radius * 0.63)
 
+        // Cardinal ticks are drawn only where there is no letter; the letter takes their place.
+        let titles = appearance.cardinalTitles
         let majorPath = UIBezierPath()
-        for angle in stride(from: 0, to: 360, by: 90) {
+        for (index, angle) in stride(from: 0, to: 360, by: 90).enumerated()
+        where index >= titles.count || titles[index].isEmpty {
             appendTick(to: majorPath, center: c, radius: radius, degrees: CGFloat(angle), from: 0.86, to: 0.93)
         }
         majorTicksLayer.path = majorPath.cgPath
@@ -184,11 +190,13 @@ public final class QiblaCompassView: UIView {
         pivotView.center = CGPoint(x: bounds.midX, y: bounds.midY)
         pivotView.layer.cornerRadius = pivotSize / 2
 
-        // Labels are placed with bounds/center so their own rotation does not disturb layout.
-        let labelRadius = radius - 14
+        // Letters sit on the tick band (0.86–0.93 r) so they never cross the ring or a tick.
+        // Placed with bounds/center so their own rotation does not disturb layout.
+        let labelRadius = radius * 0.895
         for (index, label) in cardinalLabels.enumerated() {
             let angle = CGFloat(index) * .pi / 2 - .pi / 2
-            label.bounds = CGRect(x: 0, y: 0, width: 40, height: 20)
+            // Size to the glyph so wide letters (W) stay off the ring.
+            label.bounds = CGRect(origin: .zero, size: label.intrinsicContentSize)
             label.center = CGPoint(x: c.x + labelRadius * cos(angle), y: c.y + labelRadius * sin(angle))
         }
     }

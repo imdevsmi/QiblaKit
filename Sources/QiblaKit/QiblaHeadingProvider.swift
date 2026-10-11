@@ -70,6 +70,11 @@ public final class QiblaHeadingProvider: NSObject {
     /// `headingAccuracy` above this (degrees) is reported as needing calibration.
     public var calibrationThreshold: Double = 20
 
+    /// If no location arrives within this many seconds after `start()`, the delegate receives
+    /// `.location(CLError(.locationUnknown))`. Updates keep running, so a late fix still comes through.
+    /// Set to 0 to disable.
+    public var locationTimeout: TimeInterval = 10
+
     /// Whether iOS may show its own calibration screen.
     public var showsSystemCalibration = true
 
@@ -85,6 +90,7 @@ public final class QiblaHeadingProvider: NSObject {
         didSet {
             if let manualLocation {
                 locationManager.stopUpdatingLocation()
+                cancelLocationTimeout()
                 use(manualLocation)
             } else if isRunning {
                 locationManager.startUpdatingLocation()
@@ -100,6 +106,7 @@ public final class QiblaHeadingProvider: NSObject {
     private var smoother = HeadingSmoother()
     private var lastReportedHeading: Double?
     private var isRunning = false
+    private var timeoutWork: DispatchWorkItem?
 
     public override init() {
         super.init()
@@ -127,6 +134,7 @@ public final class QiblaHeadingProvider: NSObject {
 
     public func stop() {
         isRunning = false
+        cancelLocationTimeout()
         locationManager.stopUpdatingLocation()
         locationManager.stopUpdatingHeading()
         smoother.reset()
@@ -139,6 +147,7 @@ public final class QiblaHeadingProvider: NSObject {
         } else {
             if let last = locationManager.location { use(last) }
             locationManager.startUpdatingLocation()
+            scheduleLocationTimeout()
         }
         if CLLocationManager.headingAvailable() {
             locationManager.startUpdatingHeading()
@@ -147,7 +156,25 @@ public final class QiblaHeadingProvider: NSObject {
         }
     }
 
+    private func scheduleLocationTimeout() {
+        cancelLocationTimeout()
+        guard locationTimeout > 0 else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.isRunning else { return }
+            self.timeoutWork = nil
+            self.delegate?.qiblaProvider(self, didFailWith: .location(CLError(.locationUnknown)))
+        }
+        timeoutWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + locationTimeout, execute: work)
+    }
+
+    private func cancelLocationTimeout() {
+        timeoutWork?.cancel()
+        timeoutWork = nil
+    }
+
     private func use(_ location: CLLocation) {
+        cancelLocationTimeout()
         let result = QiblaCalculator.qibla(from: location.coordinate)
         qibla = result
         // Location changed: report on the next heading even if the phone has not moved.
